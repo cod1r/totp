@@ -1,0 +1,3 @@
+[submodule "sha3"]
+	path = src/sha3
+	url = https://github.com/cod1r/sha3
