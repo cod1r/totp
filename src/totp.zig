@@ -1,9 +1,12 @@
 const std = @import("std");
-const sha3 = @import("sha3/src/sha3.zig");
 
 fn HMAC_SHA3_256(key: []u8, text: []u8) ![]u8 {
     var key_used = key;
-    var other_key = try sha3.SHA3_256(key);
+    var sha2zig1 = std.crypto.hash.sha2.Sha256.init(.{});
+    sha2zig1.update(key);
+    var other_key: [32]u8 = undefined;
+    sha2zig1.final(&other_key);
+    //
     var key_ipad: [64]u8 = undefined;
     var key_opad: [64]u8 = undefined;
     var pad_idx: usize = 0;
@@ -28,24 +31,22 @@ fn HMAC_SHA3_256(key: []u8, text: []u8) ![]u8 {
     for (key_opad) |_, idx| {
         key_opad[idx] ^= 0x5C;
     }
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var alloc = gpa.allocator();
+    var sha2zig2 = std.crypto.hash.sha2.Sha256.init(.{});
+    sha2zig2.update(key_ipad[0..]);
+    sha2zig2.update(text);
+    var first_hash: [32]u8 = undefined;
+    sha2zig2.final(&first_hash);
 
-    var append_inner = std.ArrayList(u8).init(alloc);
-    try append_inner.appendSlice(key_ipad[0..]);
-    try append_inner.appendSlice(text);
-
-    var first_hash = try sha3.SHA3_256(append_inner.items);
-
-    var append_outer = std.ArrayList(u8).init(alloc);
-    try append_outer.appendSlice(key_opad[0..]);
-    try append_outer.appendSlice(first_hash);
-
-    var last_hash = try sha3.SHA3_256(append_outer.items);
-    return last_hash;
+    var sha2zig3 = std.crypto.hash.sha2.Sha256.init(.{});
+    sha2zig3.update(key_opad[0..]);
+    sha2zig3.update(first_hash[0..]);
+    var last_hash: [32]u8 = undefined;
+    sha2zig3.final(&last_hash);
+    //
+    return last_hash[0..];
 }
 
-fn genHOTPVal(key: []u8, text: []u8) ![]u8 {
+fn genHOTPVal(key: []u8, text: []u8, digit_len: usize) ![]u8 {
     var sha_value = try HMAC_SHA3_256(key, text);
     var fourbytesidx = sha_value[31] & 0x0F;
     var bin_code =
@@ -53,16 +54,21 @@ fn genHOTPVal(key: []u8, text: []u8) ![]u8 {
         (@intCast(u64, sha_value[fourbytesidx + 1] & 0xFF) << 16) |
         (@intCast(u64, sha_value[fourbytesidx + 2] & 0xFF) << 8) |
         (@intCast(u64, sha_value[fourbytesidx + 3] & 0xFF));
-    var digits = bin_code % std.math.pow(u64, 10, 6);
-    var digit_arr: [6]u8 = undefined;
-    for (digit_arr) |_, idx| {
-        digit_arr[5 - idx] = @intCast(u8, (digits % 10) + 48);
+    var digits = bin_code % std.math.pow(u64, 10, digit_len);
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var alloc = gpa.allocator();
+    var digit_arr = std.ArrayList(u8).init(alloc);
+    try digit_arr.appendNTimes(0, digit_len);
+
+    for (digit_arr.items) |_, idx| {
+        digit_arr.items[digit_len - 1 - idx] = @intCast(u8, (digits % 10) + 48);
         digits /= 10;
     }
-    return digit_arr[0..];
+    return digit_arr.items;
 }
 
-pub fn main() !void {
+fn genTOTPval(key: []const u8, digit_len: usize) !void {
     const time_step_seconds: u64 = 30;
     const T0: u64 = 0;
     var T = std.time.milliTimestamp();
@@ -72,13 +78,18 @@ pub fn main() !void {
 
     var bytes = std.ArrayList(u8).init(alloc);
     var steps: u64 = @intCast(u64, @divFloor((T - T0), time_step_seconds * 1000));
-    var i: u6 = 0;
-    while (i <= 7) : (i += 1) {
-        try bytes.append(@intCast(u8, (steps & (@intCast(u64, 255) << (8 * i))) >> (8 * i)));
+    var i: u6 = 8;
+    while (i > 0) : (i -= 1) {
+        try bytes.append(@intCast(u8, (steps & (@intCast(u64, 255) << (8 * (i - 1)))) >> (8 * (i - 1))));
     }
-    var key: []const u8 = "jjj";
     var key_arr = std.ArrayList(u8).init(alloc);
     try key_arr.appendSlice(key);
-    var out = try genHOTPVal(key_arr.items, bytes.items);
+    var out = try genHOTPVal(key_arr.items, bytes.items, digit_len);
     std.debug.print("{s}\n", .{out});
+}
+
+pub fn main() !void {
+    //var key: []const u8 = "12345678901234567890123456789012";
+    var key: [1]u8 = .{10};
+    try genTOTPval(key[0..], 6);
 }
