@@ -1,4 +1,5 @@
 const std = @import("std");
+const base32 = @import("base32/src/base32.zig");
 
 fn HMAC_SHA1_256(key: []u8, text: []u8) ![]u8 {
     var key_used = key;
@@ -89,6 +90,11 @@ fn genTOTPval(key: []const u8, digit_len: usize) !void {
 }
 
 pub fn main() !void {
-    var key = "";
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var alloc = gpa.allocator();
+
+    const args = try std.process.argsAlloc(alloc);
+    var key = args[1];
+    // TODO NEED TO BASE32 DECODE KEY FIRST!!!!
     try genTOTPval(key, 6);
 }
