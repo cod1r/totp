@@ -1,11 +1,11 @@
 const std = @import("std");
 
-fn HMAC_SHA3_256(key: []u8, text: []u8) ![]u8 {
+fn HMAC_SHA1_256(key: []u8, text: []u8) ![]u8 {
     var key_used = key;
-    var sha2zig1 = std.crypto.hash.sha2.Sha256.init(.{});
-    sha2zig1.update(key);
-    var other_key: [32]u8 = undefined;
-    sha2zig1.final(&other_key);
+    var sha1zig1 = std.crypto.hash.Sha1.init(.{});
+    sha1zig1.update(key);
+    var other_key: [20]u8 = undefined;
+    sha1zig1.final(&other_key);
     //
     var key_ipad: [64]u8 = undefined;
     var key_opad: [64]u8 = undefined;
@@ -31,24 +31,24 @@ fn HMAC_SHA3_256(key: []u8, text: []u8) ![]u8 {
     for (key_opad) |_, idx| {
         key_opad[idx] ^= 0x5C;
     }
-    var sha2zig2 = std.crypto.hash.sha2.Sha256.init(.{});
-    sha2zig2.update(key_ipad[0..]);
-    sha2zig2.update(text);
-    var first_hash: [32]u8 = undefined;
-    sha2zig2.final(&first_hash);
+    var sha1zig2 = std.crypto.hash.Sha1.init(.{});
+    sha1zig2.update(key_ipad[0..]);
+    sha1zig2.update(text);
+    var first_hash: [20]u8 = undefined;
+    sha1zig2.final(&first_hash);
 
-    var sha2zig3 = std.crypto.hash.sha2.Sha256.init(.{});
-    sha2zig3.update(key_opad[0..]);
-    sha2zig3.update(first_hash[0..]);
-    var last_hash: [32]u8 = undefined;
-    sha2zig3.final(&last_hash);
-    //
+    var sha1zig3 = std.crypto.hash.Sha1.init(.{});
+    sha1zig3.update(key_opad[0..]);
+    sha1zig3.update(first_hash[0..]);
+    var last_hash: [20]u8 = undefined;
+    sha1zig3.final(&last_hash);
+
     return last_hash[0..];
 }
 
 fn genHOTPVal(key: []u8, text: []u8, digit_len: usize) ![]u8 {
-    var sha_value = try HMAC_SHA3_256(key, text);
-    var fourbytesidx = sha_value[31] & 0x0F;
+    var sha_value = try HMAC_SHA1_256(key, text);
+    var fourbytesidx = sha_value[19] & 0x0F;
     var bin_code =
         (@intCast(u64, sha_value[fourbytesidx] & 0x7F) << 24) |
         (@intCast(u64, sha_value[fourbytesidx + 1] & 0xFF) << 16) |
@@ -89,7 +89,6 @@ fn genTOTPval(key: []const u8, digit_len: usize) !void {
 }
 
 pub fn main() !void {
-    //var key: []const u8 = "12345678901234567890123456789012";
-    var key: [1]u8 = .{10};
-    try genTOTPval(key[0..], 6);
+    var key = "";
+    try genTOTPval(key, 6);
 }
