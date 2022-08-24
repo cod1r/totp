@@ -1,0 +1,3 @@
+[submodule "src/base32"]
+	path = src/base32
+	url = git@github.com:gernest/base32.git

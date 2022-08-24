@@ -94,7 +94,10 @@ pub fn main() !void {
     var alloc = gpa.allocator();
 
     const args = try std.process.argsAlloc(alloc);
-    var key = args[1];
-    // TODO NEED TO BASE32 DECODE KEY FIRST!!!!
-    try genTOTPval(key, 6);
+    const key = args[1];
+    const size = base32.std_encoding.decodeLen(key.len);
+    var buf_arr = std.ArrayList(u8).init(alloc);
+    try buf_arr.appendNTimes(0, size);
+    const key_decoded = try base32.std_encoding.decode(buf_arr.items, key);
+    try genTOTPval(key_decoded, 6);
 }
