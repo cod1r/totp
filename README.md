@@ -4,4 +4,5 @@ A CLI application that implements the TOTP (time based one time password) protoc
 
 ### Usage (for now)
 
-- `zig run totp.zig -- <key here>`
+- `zig build`
+- `./zig-out/totp <key here>`
