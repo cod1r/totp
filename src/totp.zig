@@ -1,7 +1,9 @@
 const std = @import("std");
 const base32 = @import("base32/src/base32.zig");
+var gpa = std.heap.GeneralPurposeAllocator(.{.safety = true}){};
+var alloc = gpa.allocator();
 
-fn HMAC_SHA1_256(key: []u8, text: []u8) ![]u8 {
+fn HMAC_SHA1_256(key: []const u8, text: []u8) ![]u8 {
     var key_used = key;
     var sha1zig1 = std.crypto.hash.Sha1.init(.{});
     sha1zig1.update(key);
@@ -47,7 +49,7 @@ fn HMAC_SHA1_256(key: []u8, text: []u8) ![]u8 {
     return last_hash[0..];
 }
 
-fn genHOTPVal(key: []u8, text: []u8, digit_len: usize) ![]u8 {
+fn genHOTPVal(key: []const u8, text: []u8, digit_len: usize) ![]u8 {
     var sha_value = try HMAC_SHA1_256(key, text);
     var fourbytesidx = sha_value[19] & 0x0F;
     var bin_code =
@@ -57,8 +59,6 @@ fn genHOTPVal(key: []u8, text: []u8, digit_len: usize) ![]u8 {
         (@intCast(u64, sha_value[fourbytesidx + 3] & 0xFF));
     var digits = bin_code % std.math.pow(u64, 10, digit_len);
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var alloc = gpa.allocator();
     var digit_arr = std.ArrayList(u8).init(alloc);
     try digit_arr.appendNTimes(0, digit_len);
 
@@ -74,29 +74,29 @@ fn genTOTPval(key: []const u8, digit_len: usize) !void {
     const T0: u64 = 0;
     var T = std.time.milliTimestamp();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var alloc = gpa.allocator();
-
     var bytes = std.ArrayList(u8).init(alloc);
+    defer bytes.deinit();
     var steps: u64 = @intCast(u64, @divFloor((T - T0), time_step_seconds * 1000));
     var i: u6 = 8;
     while (i > 0) : (i -= 1) {
         try bytes.append(@intCast(u8, (steps & (@intCast(u64, 255) << (8 * (i - 1)))) >> (8 * (i - 1))));
     }
-    var key_arr = std.ArrayList(u8).init(alloc);
-    try key_arr.appendSlice(key);
-    var out = try genHOTPVal(key_arr.items, bytes.items, digit_len);
-    std.debug.print("{s}\n", .{out});
+
+    var out = try genHOTPVal(key, bytes.items, digit_len);
+    defer alloc.free(out);
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("{s}\n", .{out});
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var alloc = gpa.allocator();
+    defer _ = gpa.deinit();
 
     const args = try std.process.argsAlloc(alloc);
+    defer alloc.free(args);
     const key = args[1];
     const size = base32.std_encoding.decodeLen(key.len);
     var buf_arr = std.ArrayList(u8).init(alloc);
+    defer buf_arr.deinit();
     try buf_arr.appendNTimes(0, size);
     const key_decoded = try base32.std_encoding.decode(buf_arr.items, key);
     try genTOTPval(key_decoded, 6);
